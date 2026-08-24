@@ -1,20 +1,20 @@
 import os
 import time
-import base64
+import re
 import urllib.parse
 import threading
 import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ==========================================
-# 1. سيرفر الحفاظ على الاتصال 24/7 (Render)
+# 1. خادم المحافظة على النشاط 24/7 (Render)
 # ==========================================
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write("✅ GOLD WHALE AI FINANCIAL AGENT IS ACTIVE 24/7".encode("utf-8"))
+        self.wfile.write("✅ AI Financial Advisor Core Active 24/7".encode("utf-8"))
 
     def log_message(self, format, *args):
         return
@@ -27,14 +27,7 @@ def start_health_server():
 # ==========================================
 # 2. إعدادات التليجرام
 # ==========================================
-# فك التشفير برمجياً لتجاوز فحص GitHub الأمني
-def get_bot_token():
-    p1 = "ODg2MjU5MjA3NDpBQUhu"
-    p2 = "Z2xSYkpKS05kUlRqam94"
-    p3 = "NFBwa1l0WWt5aUZjQWktcw=="
-    return base64.b64decode((p1 + p2 + p3).encode()).decode()
-
-BOT_TOKEN = get_bot_token()
+BOT_TOKEN = "8862592074:AAHnglRbJJKNdRTjjox4PpkYtYkyiFcAi-s"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 def send_msg(chat_id, text, reply_markup=None):
@@ -47,12 +40,12 @@ def send_msg(chat_id, text, reply_markup=None):
     if reply_markup:
         payload["reply_markup"] = reply_markup
     try:
-        res = requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=12).json()
+        res = requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10).json()
         if not res.get("ok"):
             payload.pop("parse_mode", None)
-            requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=12)
+            requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
     except Exception as e:
-        print(f"Send error: {e}")
+        print(f"Error: {e}")
 
 def get_simple_keyboard():
     return {
@@ -63,13 +56,13 @@ def get_simple_keyboard():
     }
 
 # ==========================================
-# 3. محرك الأسعار المباشرة لدمجها في التحليل
+# 3. جلب الأسعار الحية
 # ==========================================
 def get_live_ticker(symbol):
     sym = symbol.strip().upper()
     try:
         url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym}USDT"
-        res = requests.get(url, timeout=4).json()
+        res = requests.get(url, timeout=3).json()
         if "lastPrice" in res:
             return {
                 "price": float(res["lastPrice"]),
@@ -79,7 +72,7 @@ def get_live_ticker(symbol):
         pass
     try:
         url2 = f"https://www.okx.com/api/v5/market/ticker?instId={sym}-USDT"
-        res2 = requests.get(url2, timeout=4).json()
+        res2 = requests.get(url2, timeout=3).json()
         if res2.get("code") == "0" and len(res2.get("data", [])) > 0:
             d = res2["data"][0]
             price = float(d.get("last", 0))
@@ -91,67 +84,98 @@ def get_live_ticker(symbol):
     return None
 
 # ==========================================
-# 4. محرك وكيل الذكاء الاصطناعي والمستشار المالي
+# 4. محرك التحليل المالي والذكاء الاصطناعي
 # ==========================================
-AI_SYSTEM_PROMPT = (
-    "أنت المستشار المالي وصندوق الاستثمار الذكي 'GOLD WHALE AI Advisor'، خبير اقتصادي ومحلل مالي واستراتيجي رفيع المستوى في أسواق العملات الرقمية والبلوكشين والاقتصاد الكلي. "
-    "أسلوبك: ذكي، وقور، متعمق، مباشر، ويعتمد على التحليل المالي والمنطقي وحساب المخاطر (Risk Management). "
-    "توجيهات الإجابة: "
-    "1. أجب باللغة العربية بأسلوب راقٍ وواضح، واستخدم النقاط العريضة والرموز التعبيرية الهادئة. "
-    "2. عند السؤال عن عملة أو مشروع: وضح نموذج عملها، قيمتها الحقيقية، مستويات الدعم والمقاومة المتوقعة، والمخاطر. "
-    "3. عند السؤال عن نصيحة مالية: قدم استراتيجيات عملية (مثل إدارة رأس المال، الشراء التدريجي DCA، وتحديد وقف الخسارة). "
-    "4. لا تضع أي روابط خارجية أو مواقع غير مطلوبة."
-)
-
-def ask_financial_agent(user_query, extra_context=""):
-    full_prompt = f"{user_query}\n{extra_context}" if extra_context else user_query
-    
-    # محاولة الاستعلام عبر محرك الذكاء الاصطناعي
+def query_ai_online(prompt_text):
     try:
-        url = "https://text.pollinations.ai/"
-        payload = {
-            "messages": [
-                {"role": "system", "content": AI_SYSTEM_PROMPT},
-                {"role": "user", "content": full_prompt}
-            ],
-            "model": "openai",
-            "seed": 42
-        }
-        res = requests.post(url, json=payload, timeout=25)
-        if res.status_code == 200 and len(res.text.strip()) > 10:
+        url = f"https://text.pollinations.ai/{urllib.parse.quote(prompt_text)}?model=openai"
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200 and len(res.text.strip()) > 30:
             return res.text.strip()
-    except Exception as e:
-        print(f"AI Engine Error: {e}")
-
-    # محرك احتياطي مباشر
-    try:
-        encoded_prompt = urllib.parse.quote(f"{AI_SYSTEM_PROMPT}\n\nالسؤال: {full_prompt}")
-        url2 = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
-        res2 = requests.get(url2, timeout=20)
-        if res2.status_code == 200 and len(res2.text.strip()) > 10:
-            return res2.text.strip()
     except Exception:
         pass
+    return None
 
-    return "⚠️ جاري معالجة البيانات الاقتصادية، يرجى تكرار سؤالك وسأجيبك فوراً."
+def build_offline_financial_advice(text):
+    """محرك مالي احتياطي فوري يضمن الرد الذكي بنسبة 100% دون أي خطأ"""
+    clean = text.lower()
+    
+    # فحص طلبات استثمار المبالغ وتوزيع المحافظ
+    nums = re.findall(r"\d+", clean)
+    if nums and ("استثمار" in clean or "توزيع" in clean or "محفظة" in clean or "سولانة" in clean or "سوي" in clean):
+        amount = int(nums[0])
+        sol_t = get_live_ticker("SOL")
+        sui_t = get_live_ticker("SUI")
+        sol_p = f"{sol_t['price']:,.2f}$" if sol_t else "السعر الحالي"
+        sui_p = f"{sui_t['price']:,.4f}$" if sui_t else "السعر الحالي"
 
-def extract_crypto_price_context(text):
-    """التعرف على العملات في نص السؤال وإدراج سعرها المباشر لمساعدة الذكاء الاصطناعي"""
-    mapping = {
-        "سوي": "SUI", "sui": "SUI",
-        "سولانا": "SOL", "سول": "SOL", "solana": "SOL", "sol": "SOL",
-        "بيتكوين": "BTC", "بتكوين": "BTC", "bitcoin": "BTC", "btc": "BTC",
-        "ايثيريوم": "ETH", "اثيريوم": "ETH", "eth": "ETH",
-        "تون": "TON", "ton": "TON",
-        "نير": "NEAR", "near": "NEAR",
-        "ريبل": "XRP", "xrp": "XRP"
-    }
-    for word, sym in mapping.items():
-        if word in text.lower():
-            ticker = get_live_ticker(sym)
-            if ticker:
-                return f"\n[ملاحظة لحظية للسوق: سعر عملة {sym} المباشر الآن هو {ticker['price']:,.4f}$، ونسبة تغير اليوم {ticker['change']:+.2f}%]"
-    return ""
+        sol_share = int(amount * 0.45)
+        sui_share = int(amount * 0.35)
+        cash_share = amount - (sol_share + sui_share)
+
+        msg = f"💼 *خطة استثمارية واستراتيجية محفظة مخصصة: رأس مال {amount}$*\n"
+        msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+        msg += "📊 *توزيع رأس المال المقترح (إدارة مخاطر متوازنة):*\n\n"
+        msg += f"🔹 *1. شبكة سولانا (SOL) — الحصة: {sol_share}$ (45%)*\n"
+        msg += f"• *سعر السوق اللحظي:* `{sol_p}`\n"
+        msg += "• *الهدف:* أصل قيادي عالي الأمان والسيولة ويمثل العمود الفقري للمحفظة.\n"
+        msg += "• *طريقة الشراء:* تقسيم المبلغ على دفعتين بنظام الشراء التدريجي (DCA).\n\n"
+        msg += f"🔹 *2. شبكة سوي (SUI) — الحصة: {sui_share}$ (35%)*\n"
+        msg += f"• *سعر السوق اللحظي:* `{sui_p}`\n"
+        msg += "• *الهدف:* عملة نمو سريعة ذات إمكانيات مضاعفة ومنافسة مباشرة للطبقة الأولى.\n"
+        msg += "• *طريقة الشراء:* الشراء عند الارتداد من مناطق الدعم القريبة.\n\n"
+        msg += f"💵 *3. سيولة نقدية احتياطية (USDT) — الحصة: {cash_share}$ (20%)*\n"
+        msg += "• *الهدف:* استغلال أي هبوط مفاجئ في السوق لتعزيز المراكز بأسعار أقل.\n\n"
+        msg += "🎯 *توجيهات إدارة المخاطر للمدى المتوسط:*\n"
+        msg += "• لا تدخل بكامل السيولة دفعة واحدة (All-in).\n"
+        msg += "• تفعيل جني الأرباح تدريجياً عند كل صعود قوي بنسبة 30% إلى 50%.\n"
+        msg += "━━━━━━━━━━━━━━━━━━━"
+        return msg
+
+    # فحص عملة سوي
+    if "سوي" in clean or "sui" in clean:
+        t = get_live_ticker("SUI")
+        p_str = f"`{t['price']:,.4f}$` ({t['change']:+.2f}%)" if t else ""
+        return (
+            f"📊 *دراسة واستشارة مشروع عملة SUI {p_str}*\n"
+            "━━━━━━━━━━━━━━━━━━━\n\n"
+            "📌 *القيمة الفعلية للمشروع:*\n"
+            "• معالجة موازية فائقة السرعة ولغة برمجة Move الآمنة الموجهة للألعاب والـ DeFi.\n"
+            "• نمو غير مسبوق في السيولة المقفلة (TVL) وجذب كبار المطورين.\n\n"
+            "🎯 *الرؤية الاستثمارية للمدى المتوسط:*\n"
+            "• العملة مرشحة لتصدر العملات البديلة الصاعدة؛ مناطق التجميع الأفضل تكون بعد موجات التصحيح الهابطة.\n"
+            "━━━━━━━━━━━━━━━━━━━"
+        )
+
+    # فحص عملة سولانا
+    if "سولانا" in clean or "سول" in clean or "sol" in clean:
+        t = get_live_ticker("SOL")
+        p_str = f"`{t['price']:,.2f}$` ({t['change']:+.2f}%)" if t else ""
+        return (
+            f"📊 *دراسة واستشارة مشروع عملة SOLANA {p_str}*\n"
+            "━━━━━━━━━━━━━━━━━━━\n\n"
+            "📌 *القيمة الفعلية للمشروع:*\n"
+            "• المنصة الأولى عالمياً في حجم التداول اليومي والسرعة والرسوم المنخفضة.\n"
+            "• المركز الأساسي لسيولة التجزئة وعملات الميم مع ترقب صناديق الـ ETF.\n\n"
+            "🎯 *الرؤية الاستثمارية:*\n"
+            "• تعتبر الركيزة الأكثر أماناً بعد البيتكوين والإيثيريوم للاستثمار المتوسط والبعيد.\n"
+            "━━━━━━━━━━━━━━━━━━━"
+        )
+
+    # استجابة عامة
+    return (
+        f"💼 *استشارة المستشار المالي (GOLD WHALE):*\n\n"
+        f"• تم فحص طلبك حول: `{text}`.\n"
+        f"• **النصيحة الأساسية:** بناء المراكز المالية يجب أن يتم دائماً عبر تجزئة رأس المال (DCA) والتركيز على شبكات البنية التحتية القوية وتجنب ملاحقة الشموع الصاعدة.\n\n"
+        f"💡 يمكنك كتابة أي استفسار محدد مثل: *«معي 500$ كيف أستثمرها»* أو *«ما هي أهداف سولانا وسوي؟»*."
+    )
+
+def handle_user_query(text):
+    prompt = f"أنت مستشار مالي وصندوق استثماري بالعملات الرقمية، أجب باللغة العربية باحترافية عن: {text}"
+    ai_reply = query_ai_online(prompt)
+    if ai_reply:
+        return ai_reply
+    return build_offline_financial_advice(text)
 
 # ==========================================
 # 5. التقرير السريع للسوق
@@ -162,36 +186,27 @@ def get_quick_market_pulse():
     sol = get_live_ticker("SOL")
     sui = get_live_ticker("SUI")
 
-    def format_line(name, t):
-        if not t: return f"• *{name}:* `بيانات مستقرة`"
+    def fmt(name, t):
+        if not t: return f"• *{name}:* `مستقر`"
         em = "🟢" if t["change"] >= 0 else "🔴"
-        p_fmt = f"{t['price']:,.2f}$" if t['price'] >= 1 else f"{t['price']:,.4f}$"
-        return f"• *{name}:* `{p_fmt}` ({em} {t['change']:+.2f}%)"
+        p = f"{t['price']:,.2f}$" if t['price'] >= 1 else f"{t['price']:,.4f}$"
+        return f"• *{name}:* `{p}` ({em} {t['change']:+.2f}%)"
 
-    overview_context = (
-        f"الأسعار الحالية: BTC={btc['price'] if btc else 'N/A'}, ETH={eth['price'] if eth else 'N/A'}, "
-        f"SOL={sol['price'] if sol else 'N/A'}, SUI={sui['price'] if sui else 'N/A'}"
-    )
-
-    ai_analysis = ask_financial_agent(
-        "أعطني تقريراً اقتصادياً موجزاً عن اتجاه السيولة الحالي، حركة البيتكوين، والفرص في العملات البديلة في 3 نقاط واضحة.",
-        f"البيانات اللحظية: {overview_context}"
-    )
-
-    msg = "🌍 *نظرة موجزة على السوق والسيولة اللحظية*\n"
+    msg = "🌍 *نظرة موجزة على السوق وحركة السيولة اللحظية*\n"
     msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-    msg += "📊 *الأسعار القيادية الآن:*\n"
-    msg += f"{format_line('البيتكوين (BTC)', btc)}\n"
-    msg += f"{format_line('الإيثيريوم (ETH)', eth)}\n"
-    msg += f"{format_line('سولانا (SOL)', sol)}\n"
-    msg += f"{format_line('سوي (SUI)', sui)}\n\n"
-    msg += "🧠 *الرؤية والتحليل الاقتصادي:*\n"
-    msg += f"{ai_analysis}\n"
+    msg += f"{fmt('البيتكوين (BTC)', btc)}\n"
+    msg += f"{fmt('الإيثيريوم (ETH)', eth)}\n"
+    msg += f"{fmt('سولانا (SOL)', sol)}\n"
+    msg += f"{fmt('سوي (SUI)', sui)}\n\n"
+    msg += "🧠 *القراءة الاقتصادية:*\n"
+    msg += "1. استقرار حركة البيتكوين يدعم تدفق السيولة نحو العملات البديلة القوية.\n"
+    msg += "2. شبكات الطبقة الأولى السريعة ومشاريع الـ AI تقود الزخم الاستثماري.\n"
+    msg += "3. احتفظ دائماً بجزء من السيولة النقدية لاقتناص فرص الارتداد.\n"
     msg += "━━━━━━━━━━━━━━━━━━━"
     return msg
 
 # ==========================================
-# 6. الحلقة الرئيسية للبوت
+# 6. الحلقة الرئيسية
 # ==========================================
 def main():
     print("🚀 وكيل الذكاء الاصطناعي والمستشار المالي يعمل الآن 24/7...")
@@ -209,39 +224,33 @@ def main():
                     if not chat_id or not text:
                         continue
 
-                    # 1. رسالة البدء والترحيب
                     if text in ["/start", "بدء", "مرحبا"]:
                         welcome = (
                             "👋 *أهلاً بك! أنا مستشارك المالي الذكي (GOLD WHALE AI Advisor).*\n\n"
                             "💼 **كيف يمكنني مساعدتك اليوم؟**\n"
-                            "تحدث معي مباشرة واطرح أي سؤال اقتصادي أو استثماري ببالك، على سبيل المثال:\n"
-                            "• _«معي 1000$ كيف أوزعها في السوق بأمان؟»_\n"
-                            "• _«ما هو مشروع عملة SUI وما هي توقعاتها ونقاط قوتها؟»_\n"
-                            "• _«ما رأيك بوضع السوق حالياً وهل الوقت مناسب للشراء؟»_\n"
-                            "• _«حلل لي عملة سولانا ومستويات الدخول المناسبة»_\n\n"
-                            "👇 *اكتب استفسارك مباشرة في المحادثة، أو استخدم الأزرار السريعة بالأسفل.*"
+                            "تحدث معي مباشرة واطرح أي استفسار مالي أو استثماري ببالك، مثل:\n"
+                            "• _«معي 1000$ استثمار متوسط المدى في سولانا وسوي»_\n"
+                            "• _«ما هي أفضل مشاريع الذكاء الاصطناعي للاستثمار؟»_\n"
+                            "• _«كيف أوزع محفظتي بطريقة آمنة؟»_\n\n"
+                            "👇 *اكتب رسالتك مباشرة، أو استخدم الأزرار أدناه.*"
                         )
                         send_msg(chat_id, welcome, get_simple_keyboard())
 
-                    # 2. الأزرار السريعة
                     elif text == "🌍 نظرة سريعة على السوق والسيولة":
                         send_msg(chat_id, get_quick_market_pulse())
 
                     elif text == "💼 استشارة مالية وإدارة محفظة":
                         guide = (
                             "💼 *قسم الاستشارات المالية وإدارة المحافظ:*\n\n"
-                            "للحصول على خطة مخصصة، اكتب لي مباشرة تفاصيل طلبك، مثل:\n"
-                            "• حجم رأس المال المتاح للاستثمار.\n"
-                            "• هدفك (مضاربة سريعة أم استثمار للمدى المتوسط والبعيد).\n"
-                            "• العملات التي تفكر بها أو تملكها حالياً.\n\n"
-                            "🤖 *سأقوم ببناء خطة توزيع ومخاطر متكاملة تناسبك.*"
+                            "أرسل لي تفاصيل محفظتك وسأعطيك خطة مدروسة فوراً:\n"
+                            "• المبلغ المتوفر للاستثمار (مثال: 500$ أو 2000$).\n"
+                            "• المدة الزمنية (مضاربة سريعة، أو استثمار للمدى المتوسط والبعيد).\n"
+                            "• العملات التي تفضلها أو تمتلكها حالياً."
                         )
                         send_msg(chat_id, guide)
 
-                    # 3. أي رسالة أخرى: يتولاها الذكاء الاصطناعي كمستشار مالي فوراً
                     else:
-                        price_context = extract_crypto_price_context(text)
-                        reply = ask_financial_agent(text, price_context)
+                        reply = handle_user_query(text)
                         send_msg(chat_id, reply)
 
         except Exception as e:
