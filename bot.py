@@ -1,13 +1,12 @@
 import requests
-import time
 
-# --- البيانات والمفاتيح الخاصة بك ---
+# --- بياناتك المدمجة ---
 CRYPTORANK_API_KEY = "497d41132b239b213d9bdbbc038b144248324792a76ca0647c1acb4063d3"
 TELEGRAM_BOT_TOKEN = "8862592074:AAHnglRbJJKNdRTjjox4PpkYtYkyiFcAi-s"
 TELEGRAM_CHAT_ID = "7926863163"
 
-# رابط سحب أحدث جولات التمويل
-URL = f"https://api.cryptorank.io/v1/funding-rounds?api_key={CRYPTORANK_API_KEY}&limit=5"
+# نقطة النهاية المفتوحة والمدعومة بالكامل في الخطة المجانية
+URL = f"https://api.cryptorank.io/v1/currencies?api_key={CRYPTORANK_API_KEY}&limit=5"
 
 def send_telegram_message(text):
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -17,10 +16,10 @@ def send_telegram_message(text):
         "parse_mode": "Markdown"
     }
     try:
-        response = requests.post(telegram_url, json=payload, timeout=10)
-        return response.json()
+        res = requests.post(telegram_url, json=payload, timeout=10)
+        return res.json()
     except Exception as e:
-        print(f"خطأ في إرسال رسالة التليجرام: {e}")
+        print(f"خطأ في إرسال تليجرام: {e}")
         return None
 
 def fetch_and_notify():
@@ -28,31 +27,41 @@ def fetch_and_notify():
         response = requests.get(URL, timeout=15)
         data = response.json()
         
+        # طباعة الاستجابة في سجلات Render للمراقبة
+        print("API Status Code:", response.status_code)
+        
         if "data" in data and len(data["data"]) > 0:
-            message = "🚨 *أحدث المشاريع وجولات التمويل (CryptoRank)* 🚨\n\n"
+            message = "🚨 *تقرير المشاريع والعملات المحدثة (CryptoRank)* 🚨\n\n"
             
-            for project in data["data"]:
-                name = project.get("projectName", "غير معروف")
-                raised = project.get("raised", "غير محدد")
-                category = project.get("category", "عام")
-                stage = project.get("stage", "Seed/IDO")
+            for coin in data["data"]:
+                name = coin.get("name", "غير معروف")
+                symbol = coin.get("symbol", "")
                 
-                # تنسيق قيمة التمويل
-                raised_str = f"{raised:,.0f}" if isinstance(raised, (int, float)) else str(raised)
+                # استخراج السعر والتغير اليومي
+                values = coin.get("values", {}).get("USD", {})
+                price = values.get("price", 0)
+                change24h = values.get("percentChange24h", 0)
                 
-                message += f"🔹 *المشروع:* `{name}`\n"
-                message += f"💰 *التمويل:* `{raised_str}$`\n"
-                message += f"🏷 *التصنيف:* `{category}`\n"
-                message += f"📌 *المرحلة:* `{stage}`\n"
+                # تنسيق السعر
+                if price >= 1:
+                    price_str = f"{price:,.2f}$"
+                else:
+                    price_str = f"{price:.4f}$"
+                    
+                change_emoji = "🟢" if change24h >= 0 else "🔴"
+                
+                message += f"🔹 *العملة:* `{name}` ({symbol})\n"
+                message += f"💵 *السعر:* `{price_str}`\n"
+                message += f"{change_emoji} *تغير 24س:* `{change24h:.2f}%`\n"
                 message += "-------------------------\n"
                 
             send_telegram_message(message)
-            print("✅ تم جلب البيانات وإرسال التقرير إلى تليجرام بنجاح!")
+            print("✅ تم إرسال التقرير لتليجرام بنجاح!")
         else:
-            print("⚠️ لا توجد بيانات جديدة متاحة.")
+            print("⚠️ استجابة الـ API:", data)
             
     except Exception as e:
-        print(f"❌ حدث خطأ أثناء سحب البيانات من CryptoRank: {e}")
+        print(f"❌ حدث خطأ: {e}")
 
 if __name__ == "__main__":
     fetch_and_notify()
