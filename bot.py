@@ -1,7 +1,26 @@
-import requests
+import os
 import time
+import threading
+import requests
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# --- المفاتيح الخاصة بك ---
+# --- تشغيل سيرفر وهمي لتجاوز فحص Port في Render مجاناً ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write("✅ Bot is active and running 24/7!".encode("utf-8"))
+
+    def log_message(self, format, *args):
+        return  # كتم سجلات فحص السيرفر للحفاظ على نظافة الـ Logs
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# --- إعدادات ومفاتيح البوت ---
 CRYPTORANK_API_KEY = "497d41132b239b213d9bdbbc038b144248324792a76ca0647c1acb4063d3"
 TELEGRAM_BOT_TOKEN = "8862592074:AAHnglRbJJKNdRTjjox4PpkYtYkyiFcAi-s"
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
@@ -28,7 +47,7 @@ ARABIC_COINS = {
     "رندر": "RENDER", "rndr": "RENDER"
 }
 
-# نبذة تعريفية وتحليلية لأهم المشاريع
+# نبذة تحليلية لمشاريع العملات
 PROJECT_INFO = {
     "SOL": {"name": "سولانا (Solana)", "desc": "شبكة طبقة أولى فائقة السرعة ومنخفضة الرسوم، تُعد المركز الأول لسيولة التداول وعملات الميم والـ DeFi.", "outlook": "مشروع قيادي مرشح لمواصلة جذب السيولة وتوسيع الشراكات المؤسسية."},
     "SUI": {"name": "سوي (Sui Network)", "desc": "شبكة طبقة أولى مبنية بلغة Move المطورة في ميتا سابقاً، وتتميز بمعالجة المعاملات الفورية وألعاب الويب 3.", "outlook": "من أسرع الشبكات نمواً في السيولة المقفلة (TVL) ولديها زخم قوي للمنافسة."},
@@ -62,7 +81,6 @@ def get_main_keyboard():
     }
 
 def get_live_ticker(symbol):
-    """سحب الأسعار اللحظية من محرك OKX المفتوح عالمياً"""
     try:
         url = f"https://www.okx.com/api/v5/market/ticker?instId={symbol}-USDT"
         res = requests.get(url, timeout=6).json()
@@ -76,7 +94,7 @@ def get_live_ticker(symbol):
             vol = float(d.get("volCcy24h", 0))
             return {"price": price, "change": change, "high": high, "low": low, "vol": vol}
     except Exception as e:
-        print(f"Ticker error for {symbol}: {e}")
+        print(f"Ticker error: {e}")
     return None
 
 def analyze_coin(user_input):
@@ -85,12 +103,12 @@ def analyze_coin(user_input):
     
     ticker = get_live_ticker(symbol)
     if not ticker:
-        return f"⚠️ لم يتم العثور على بيانات لعملة `{user_input}`.\n\nجرّب كتابة رمز العملة مثل: `SOL`, `SUI`, `BTC`, `ETH`, `TON` أو اسمها بالعربي مثل: `سولانا` أو `سوي`."
+        return f"⚠️ لم يتم العثور على بيانات لعملة `{user_input}`.\n\nجرّب كتابة رمز العملة مثل: `SOL`, `SUI`, `BTC`, `ETH` أو اسمها بالعربي مثل: `سولانا` أو `سوي`."
     
     info = PROJECT_INFO.get(symbol, {
         "name": f"مشروع {symbol}",
         "desc": "مشروع رقمي مدرج للتداول الفوري في الأسواق المركزية واللامركزية.",
-        "outlook": "يخضع لحركة السيولة العامة للقطاع؛ التداول مرتبط باختراق المقاومات الفنية."
+        "outlook": "يخضع لحركة السيولة العامة؛ التداول الفني مرتبط باختراق مناطق الدعم والمقاومة."
     })
     
     emoji = "🟢" if ticker["change"] >= 0 else "🔴"
@@ -116,7 +134,7 @@ def get_market_pulse():
     sol = get_live_ticker("SOL")
     
     if not btc:
-        return "⚠️ جاري تحديث بيانات السوق العامة..."
+        return "⚠️ جاري تحديث بيانات السوق..."
     
     btc_emoji = "🟢" if btc["change"] >= 0 else "🔴"
     eth_emoji = "🟢" if eth["change"] >= 0 else "🔴"
@@ -160,17 +178,17 @@ def get_investments():
     msg = "💼 *أحدث جولات الاستثمار والتمويل المؤسسي في الكريبتو*\n"
     msg += "━━━━━━━━━━━━━━━━━━━\n\n"
     msg += "🏛 *1. مشاريع الذكاء الاصطناعي اللامركزي (Decentralized AI)*\n"
-    msg += "• *التركيز:* جذب جولات تمويل تفوق 50 مليون دولار لبناء معالجات وحوسبة سحابية موزعة.\n"
-    msg += "• *التقييم:* قطاع واعد يحظى بأكبر زخم استثماري خلال هذا العام.\n\n"
+    msg += "• *التركيز:* جذب جولات تمويل تفوق 50 مليون دولار لبناء بنية تحتية ومعالجات موزعة.\n"
+    msg += "• *التقييم:* قطاع واعد يحظى بأكبر زخم استثماري.\n\n"
     msg += "⚡ *2. شبكات الطبقة الأولى التفرعية (Parallel EVM & Move)*\n"
-    msg += "• *التركيز:* صناديق رأس المال تستثمر في تسريع معالجة المعاملات الفورية (مثل Monad و Sui).\n"
-    msg += "• *التقييم:* مشاريع مهيأة لتصدر السيولة في الدورات الصاعدة القادمة.\n\n"
-    msg += "💡 *توجيه استثماري:* تتبع المشاريع التي تحظى بدعم صناديق الفئة الأولى (Tier 1 VCs) وشارك في شبكاتها التجريبية (Testnets) مبكراً.\n"
+    msg += "• *التركيز:* استثمار صناديق رأس المال في تسريع المعاملات الفورية (مثل Monad و Sui).\n"
+    msg += "• *التقييم:* مشاريع مرشحة لتصدر تدفقات السيولة القادمة.\n\n"
+    msg += "💡 *توجيه استثماري:* تتبع المشاريع المدعومة من صناديق الفئة الأولى وشارك في شبكاتها التجريبية (Testnets).\n"
     msg += "━━━━━━━━━━━━━━━━━━━"
     return msg
 
 def main():
-    print("🚀 البوت يعمل الآن بنظام الاستجابة الذكية الفورية...")
+    print("🚀 البوت يعمل الآن ويستمع لكافة رسائلك في تليجرام 24/7...")
     offset = 0
     while True:
         try:
@@ -187,8 +205,8 @@ def main():
                     
                     if text in ["/start", "بدء", "قائمة"]:
                         welcome = (
-                            "👋 *أهلاً بك في منصتك التحليلية المتطورة للعملات الرقمية!*\n\n"
-                            "اختر من القائمة بالأسفل، أو **اكتب اسم أي عملة بالعربي أو الإنجليزي** (مثل: `سولانا`، `سوي`، `BTC`، `ETH`) وسأعطيك تحليلاً فورياً لمشروعها وأسعارها وتوقعاتها."
+                            "👋 *أهلاً بك في منصتك التحليلية للعملات الرقمية!*\n\n"
+                            "اختر من القائمة بالأسفل، أو **اكتب اسم أي عملة بالعربي أو الإنجليزي** (مثل: `سولانا`، `سوي`، `BTC`، `ETH`) وسأعطيك تحليلاً فورياً شاملاً."
                         )
                         send_message(chat_id, welcome, get_main_keyboard())
                         
@@ -204,8 +222,8 @@ def main():
                     elif text == "💡 تعليمات وكيفية البحث":
                         guide = (
                             "📌 *كيف تستخدم البوت؟*\n\n"
-                            "1️⃣ اضغط على الأزرار السريعة لجلب حالة السوق، المشاريع الواعدة، أو استثمارات الصناديق.\n"
-                            "2️⃣ اكتب اسم أي عملة مباشرة في الرسالة (مثال: `سوي`، `سولانا`، `BTC`، `NEAR`، `TON`) وستحصل فوراً على نبذة المشروع، السعر اللحظي، وأعلى/أدنى سعر، والتقييم الفني."
+                            "1️⃣ اضغط على الأزرار السريعة لجلب حالة السوق، المشاريع، أو التمويلات.\n"
+                            "2️⃣ اكتب اسم أي عملة مباشرة (مثال: `سوي`، `سولانا`، `BTC`، `NEAR`، `TON`) وستحصل على السعر اللحظي، نبذة المشروع، وتحليل فني وتوقعات."
                         )
                         send_message(chat_id, guide)
                         
@@ -217,4 +235,6 @@ def main():
             time.sleep(3)
 
 if __name__ == "__main__":
+    # تشغيل سيرفر الويب في مسار فرعي ليرى Render أن المنفذ مفتوح
+    threading.Thread(target=start_health_server, daemon=True).start()
     main()
