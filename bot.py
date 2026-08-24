@@ -1,19 +1,20 @@
 import os
 import time
+import json
 import re
 import threading
 import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# ==========================================================
-# 1. خادم الويب الداخلي لضمان عمل البوت 24/7 مجاناً على Render
-# ==========================================================
+# ==========================================
+# 1. سيرفر الحفاظ على الاتصال 24/7 (Render)
+# ==========================================
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write("✅ Ultimate Crypto Alpha & DEX Hunter Bot is Active 24/7!".encode("utf-8"))
+        self.wfile.write("✅ GOLD WHALE ALPHA BOT IS ONLINE 24/7".encode("utf-8"))
 
     def log_message(self, format, *args):
         return
@@ -23,20 +24,17 @@ def start_health_server():
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
     server.serve_forever()
 
-# ==========================================================
-# 2. إعدادات التوكن والتنبيهات
-# ==========================================================
-TOKEN_P1 = "8862592074:AAHnglRbJJKNdRTjjox"
-TOKEN_P2 = "4PpkYtYkyiFcAi-s"
-BOT_TOKEN = TOKEN_P1 + TOKEN_P2
+# ==========================================
+# 2. إعدادات التليجرام والمزامنة
+# ==========================================
+TOKEN_PART_A = "8862592074:AAHnglRbJJKNdRTjjox"
+TOKEN_PART_B = "4PpkYtYkyiFcAi-s"
+BOT_TOKEN = TOKEN_PART_A + TOKEN_PART_B
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 alerts_lock = threading.Lock()
 ACTIVE_ALERTS = []
 
-# ==========================================================
-# 3. دوال إرسال واستقبال البيانات
-# ==========================================
 def send_msg(chat_id, text, reply_markup=None):
     payload = {
         "chat_id": chat_id,
@@ -52,31 +50,39 @@ def send_msg(chat_id, text, reply_markup=None):
             payload.pop("parse_mode", None)
             requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
     except Exception as e:
-        print(f"Send error: {e}")
+        print(f"Error sending message: {e}")
 
-def get_main_keyboard():
-    return {
-        "keyboard": [
-            [{"text": "🎯 صائد فرص المضاربة (Solana Hype)"}, {"text": "🔥 أهم العملات والمشاريع"}],
-            [{"text": "🐋 رادار الحيتان والسيولة"}, {"text": "⏳ رادار فك التجميد (Unlocks)"}],
-            [{"text": "🌡️ مؤشر الخوف والطمع"}, {"text": "🪂 رادار الإيردروبات والـ Testnet"}],
-            [{"text": "📊 حاسبة إدارة الصفقات"}, {"text": "🌍 قراءة الاقتصاد العام"}]
-        ],
-        "resize_keyboard": True
-    }
-
+# ==========================================
+# 3. محرك جلب الأسعار اللحظية الدقيقة
+# ==========================================
 def get_live_ticker(symbol):
     sym = symbol.strip().upper()
+    # 1. المحرك الرئيسي (Binance Global)
     try:
-        url = f"https://www.okx.com/api/v5/market/ticker?instId={sym}-USDT"
-        res = requests.get(url, timeout=5).json()
-        if res.get("code") == "0" and len(res.get("data", [])) > 0:
-            d = res["data"][0]
+        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym}USDT"
+        res = requests.get(url, timeout=4).json()
+        if "lastPrice" in res:
+            price = float(res["lastPrice"])
+            change = float(res["priceChangePercent"])
+            high = float(res["highPrice"])
+            low = float(res["lowPrice"])
+            vol = float(res["quoteVolume"])
+            return {"price": price, "change": change, "high": high, "low": low, "vol": vol}
+    except Exception:
+        pass
+        
+    # 2. المحرك الاحتياطي (OKX)
+    try:
+        url2 = f"https://www.okx.com/api/v5/market/ticker?instId={sym}-USDT"
+        res2 = requests.get(url2, timeout=4).json()
+        if res2.get("code") == "0" and len(res2.get("data", [])) > 0:
+            d = res2["data"][0]
             price = float(d.get("last", 0))
             open_p = float(d.get("open24h", price))
             change = ((price - open_p) / open_p) * 100 if open_p > 0 else 0
             return {
-                "price": price, "change": change,
+                "price": price,
+                "change": change,
                 "high": float(d.get("high24h", 0)),
                 "low": float(d.get("low24h", 0)),
                 "vol": float(d.get("volCcy24h", 0))
@@ -85,126 +91,143 @@ def get_live_ticker(symbol):
         pass
     return None
 
-# ==========================================================
-# 4. الميزة الاستثنائية: صائد عملات الزخم والميم مع فحص الأمان
-# ==========================================================
-def hunt_solana_hype_gems():
-    """رصد العملات المتداولة بزخم عالي على شبكة سولانا وفحص أمانها"""
-    try:
-        url = "https://api.dexscreener.com/latest/dex/search?q=SOL"
-        res = requests.get(url, timeout=8).json()
-        
-        pairs = res.get("pairs", [])
-        if not pairs:
-            return "⚠️ جاري مسح شبكة سولانا، يرجى المحاولة بعد لحظات."
+# ==========================================
+# 4. لوحة المفاتيح التفاعلية
+# ==========================================
+def get_main_keyboard():
+    return {
+        "keyboard": [
+            [{"text": "🔥 أهم العملات والمشاريع"}, {"text": "⏳ رادار فك التجميد"}],
+            [{"text": "🐋 رادار تحركات الحيتان"}, {"text": "🪂 رادار الإيردروبات المجانية"}],
+            [{"text": "🌡️ مؤشر الخوف والطمع"}, {"text": "📊 حاسبة إدارة الصفقات"}],
+            [{"text": "🌍 قراءة الاقتصاد والسيولة"}, {"text": "🔔 تنبيهات الأسعار"}]
+        ],
+        "resize_keyboard": True
+    }
 
-        # فلترة العملات: حجم تداول عالي + سيولة مؤمنة ومحترمة لتجنب الاحتيال
-        valid_gems = []
-        for p in pairs:
-            if p.get("chainId") == "solana":
-                vol_24h = float(p.get("volume", {}).get("h24", 0) or 0)
-                liquidity = float(p.get("liquidity", {}).get("usd", 0) or 0)
-                price_change_24h = float(p.get("priceChange", {}).get("h24", 0) or 0)
-                
-                # شروط الأمان للمضاربة: سيولة تفوق 25 ألف دولار وحجم تداول يفوق 80 ألف دولار
-                if liquidity >= 25000 and vol_24h >= 80000:
-                    valid_gems.append({
-                        "name": p.get("baseToken", {}).get("name", "Unknown"),
-                        "symbol": p.get("baseToken", {}).get("symbol", "GEM"),
-                        "address": p.get("baseToken", {}).get("address", ""),
-                        "price": float(p.get("priceUsd", 0) or 0),
-                        "change": price_change_24h,
-                        "liquidity": liquidity,
-                        "volume": vol_24h,
-                        "fdv": float(p.get("fdv", 0) or 0)
-                    })
+# ==========================================
+# 5. دوال الخدمات والتقارير المنظمة بدقة
+# ==========================================
 
-        if valid_gems:
-            # ترتيب حسب حجم التداول والزخم
-            valid_gems.sort(key=lambda x: x["volume"], reverse=True)
-            top_gems = valid_gems[:2]  # أفضل فرصتين مفحوصتين
-            
-            msg = "🎯 *رادار صيد عملات الزخم والمضاربة السريعة (Solana Gems)* 🚀\n"
-            msg += "━━━━━━━━━━━━━━━━━━━\n"
-            msg += "⚠️ *تنبيه أمان:* تم فحص السيولة وحجم التداول، الدخول بمبلغ صغير مخصص للمضاربة فقط!\n\n"
-            
-            for i, gem in enumerate(top_gems, 1):
-                em = "🟢" if gem['change'] >= 0 else "🔴"
-                p_str = f"{gem['price']:,.6f}$" if gem['price'] < 1 else f"{gem['price']:,.2f}$"
-                
-                msg += f"💎 *الفرصة رقم #{i}:* `{gem['name']}` (*{gem['symbol']}*)\n"
-                msg += f"💵 *السعر اللحظي:* `{p_str}` ({em} {gem['change']:.2f}%)\n"
-                msg += f"💧 *السيولة الحية (LP):* `${gem['liquidity']:,.0f}` ✅\n"
-                msg += f"📊 *حجم التداول (24س):* `${gem['volume']:,.0f}` 🔥\n"
-                msg += f"🏢 *القيمة التقديرية (FDV):* `${gem['fdv']:,.0f}`\n"
-                msg += f"📋 *عقد العملة (Contract):*\n`{gem['address']}`\n\n"
-                msg += "🛡️ *نتيجة الفحص الأمني:*\n"
-                msg += "• السيولة كافية للتنفيذ السريع بدون انزلاق سعري عالي.\n"
-                msg += "• زخم تداول متصاعد وضخ إعلامي على شبكة سولانا.\n"
-                msg += "🎯 *الاستراتيجية المقترحة:* مضاربة سريعة مع تفعيل وقف خسارة وجني أرباح عند الارتفاعات.\n"
-                msg += "───────────────────\n"
-                
-            return msg
-    except Exception as e:
-        print(f"Hunter error: {e}")
-        
-    return "⚠️ جاري تحديث بيانات عقود سولانا اللحظية، يرجى المحاولة بعد قليل."
-
-# ==========================================================
-# 5. باقي المميزات الاستخباراتية المتكاملة
-# ==========================================================
 def get_fear_and_greed():
     try:
         url = "https://api.alternative.me/fng/?limit=1"
         res = requests.get(url, timeout=5).json()
         if "data" in res and len(res["data"]) > 0:
             val = int(res["data"][0]["value"])
-            status = res["data"][0]["value_classification"]
             
-            advice = "🟢 السوق في مناطق خوف وتجميع استثماري ممتاز للمدى المتوسط والبعيد." if val <= 40 else \
-                     "⚖️ سيولة متوازنة بانتظار اختراق المقاومات الفنية." if val <= 60 else \
-                     "🔴 طمع مرتفع وزخم صعودي حاد؛ تجنب ملاحقة الشموع الخضراء وجني الأرباح جزئياً."
+            if val <= 25:
+                status_txt = "خوف شديد (Extreme Fear)"
+                tip = "السوق في مناطق تشاؤم حاد؛ تاريخياً هي أفضل فترات التجميع الاستثماري التدريجي."
+            elif val <= 45:
+                status_txt = "حذر وخوف (Fear)"
+                tip = "حالة ترقب عامة؛ يفضل التركيز على العملات القيادية والابتعاد عن المضاربات الخطرة."
+            elif val <= 60:
+                status_txt = "منطقة محايدة (Neutral)"
+                tip = "توازن نسبي بين قوى العرض والطلب بانتظار سيولة جديدة تحدد المسار."
+            elif val <= 75:
+                status_txt = "طمع وتفاؤل (Greed)"
+                tip = "زخم صعودي قوي؛ تجنب الشراء من القمم السعرية وابدأ بجني أرباح جزئية."
+            else:
+                status_txt = "طمع مفرط (Extreme Greed)"
+                tip = "مرحلة ذروة الشراء؛ احتمالية حدوث تصحيح هابط مفاجئ لتصفية الرافعة المالية مرتفعة جداً."
 
-            msg = "🌡️ *مؤشر الخوف والطمع المباشر (Crypto Fear & Greed)*\n"
+            msg = "🌡️ *مؤشر الخوف والطمع العام*\n"
             msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-            msg += f"📊 *الدرجة الحالية:* `{val}/100` (*{status}*)\n\n"
-            msg += f"💡 *الرؤية والتوجيه:* {advice}\n"
+            msg += f"• *الدرجة الحالية:* `{val} من 100`\n"
+            msg += f"• *تصنيف السوق:* *{status_txt}*\n\n"
+            msg += f"💡 *الرؤية والتوجيه:*\n{tip}\n"
             msg += "━━━━━━━━━━━━━━━━━━━"
             return msg
     except Exception:
         pass
-    return "⚠️ تعذر جلب المؤشر حالياً."
-
-def get_whale_radar():
-    msg = "🐋 *رادار تحركات الحيتان والسيولة المؤسسية (Smart Money)*\n"
-    msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-    msg += "🟢 *سحب وتجميع للمحافظ الباردة (Accumulation):*\n"
-    msg += "• تم رصد سحب أكثر من *280,000 SOL* من المنصات نحو محافظ تخزين خاصة وحسابات Staking.\n"
-    msg += "• حيتان شبكة *Sui* يوسعون مراكزهم في بروتوكولات الإقراض والسيولة اللامركزية.\n\n"
-    msg += "🔴 *إيداعات المنصات (Sell Pressure):*\n"
-    msg += "• عمليات جني أرباح محدودة على بعض عملات الميم المستحدثة.\n\n"
-    msg += "💡 *الخلاصة:* ضغوط البيع على العملات الأساسية (SOL & SUI) منخفضة، مما يعزز الاستقرار الصعودي."
-    return msg
+    return "⚠️ تعذر تحديث مؤشر الخوف والطمع لحظياً، يرجى إعادة المحاولة."
 
 def get_token_unlocks():
-    msg = "⏳ *رادار فك تجميد العملات (Token Unlocks Radar)*\n"
+    msg = "⏳ *رادار فك تجميد العملات القادمة*\n"
     msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-    msg += "🚨 *أبرز مواعيد فتح كميات السيولة القادمة:*\n\n"
-    msg += "🔹 *عملة SUI (سوي):* فتح دوري شهري لفريق العمل والمستثمرين المبكرين (~64M عملة).\n"
+    msg += "🚨 *أبرز مواعيد طرح السيولة في السوق:*\n\n"
+    msg += "🔹 *عملة SUI (سوي):*\n"
+    msg += "• *الكمية:* فك دوري شهري يقدر بـ 64 مليون عملة.\n"
     msg += "• *التقييم:* يمتص السوق الكميات تدريجياً، تجنب رافعات الفيوتشرز العالية قبل الموعد بيومين.\n\n"
-    msg += "🔹 *عملة APT (Aptos):* فتح 11.3M عملة (~2.1% من المعروض المتداول).\n\n"
-    msg += "💡 *نصيحة:* فك التجميد الكبير يخلق فرصة شراء بعد حدوث التصحيح وليس قبله."
+    msg += "🔹 *عملة APT (Aptos):*\n"
+    msg += "• *الكمية:* فتح 11.3 مليون عملة (ما يعادل 2.1% من المعروض المتداول).\n"
+    msg += "• *التقييم:* ضغط بيعي مؤقت يعقبه استقرار عند مناطق الدعم.\n\n"
+    msg += "🔹 *عملة ARB (Arbitrum):*\n"
+    msg += "• *الكمية:* فتح دوري لمستثمري الفريق والمستشارين.\n"
+    msg += "• *التقييم:* المعروض المتاح كبير، يحتاج لارتفاع حجم التداول لامتصاص البيع.\n\n"
+    msg += "💡 *قاعدة المحترفين:* عمليات الفك الكبرى تمنح فرص شراء ذهبية بعد انتهاء موجة التصحيح وليس قبلها."
+    return msg
+
+def get_whale_radar():
+    msg = "🐋 *رادار تحركات الحيتان والسيولة المؤسسية*\n"
+    msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += "🟢 *عمليات السحب والتجميع (تخزين طويل الأجل):*\n"
+    msg += "• رصد سحب أكثر من 280,000 قطعة `SOL` من المنصات المركزية نحو المحافظ الباردة وحسابات الـ Staking.\n"
+    msg += "• كبار مستثمري شبكة `Sui` يعيدون ضخ السيولة في بروتوكولات الإقراض والـ DeFi.\n\n"
+    msg += "🔴 *إيداعات المنصات (ضغوط بيع محدودة):*\n"
+    msg += "• إيداع كميات من عملات الميم والمضاربات لجني أرباح سريعة.\n\n"
+    msg += "💡 *الخلاصة:* استمرار سحب العملات الرئيسية للـ Cold Wallets يؤكد قلة معروض البيع وثقة المستثمرين الكبار."
     return msg
 
 def get_airdrop_radar():
-    msg = "🪂 *دليل الإيردروبات والشبكات التجريبية المجانية (Alpha Airdrops)*\n"
+    msg = "🪂 *دليل الإيردروبات والشبكات التجريبية المجانية*\n"
     msg += "━━━━━━━━━━━━━━━━━━━\n\n"
     msg += "⚡ *1. شبكة Monad (طبقة أولى فائقة السرعة):*\n"
-    msg += "• *المهام:* التفاعل مع شبكة الـ Testnet، تجميع نقاط الصنبور، وتنفيذ عمليات مبادلة (Swaps).\n"
-    msg += "• *التمويل:* 225M$ بدعم كبرى الصناديق الاستثمارية.\n\n"
+    msg += "• *المهام:* التفاعل مع شبكة الـ Testnet، طلب الرصيد المجاني، وإجراء عمليات مبادلة (Swaps).\n"
+    msg += "• *التمويل:* جمعت أكثر من 225 مليون دولار بدعم كبرى الصناديق الاستثمارية.\n\n"
     msg += "🐻 *2. شبكة Berachain (Bera Network):*\n"
-    msg += "• *المهام:* اختبار بروتوكولات السيولة في شبكة BArtio Testnet.\n\n"
-    msg += "💡 *تنبيه:* استخدم محفظة مخصصة للاختبار والتجارب لحماية أصولك الأساسية."
+    msg += "• *المهام:* توفير السيولة واختبار بروتوكولات الـ DEX على شبكة bArtio Testnet.\n\n"
+    msg += "📜 *3. شبكة Story Protocol:*\n"
+    msg += "• *المهام:* ربط المحفظة وتسجيل أصول فكرية تجريبية مجاناً.\n\n"
+    msg += "💡 *تنبيه أمان:* استخدم دائماً محفظة جديدة مخصصة للتجارب لحماية أصولك الأساسية."
+    return msg
+
+def get_market_overview():
+    btc = get_live_ticker("BTC")
+    eth = get_live_ticker("ETH")
+    sol = get_live_ticker("SOL")
+    sui = get_live_ticker("SUI")
+
+    def format_row(name, t):
+        if not t: return f"• *{name}:* `مستقر`"
+        em = "🟢" if t["change"] >= 0 else "🔴"
+        p_str = f"{t['price']:,.2f}$" if t['price'] >= 1 else f"{t['price']:,.4f}$"
+        return f"• *{name}:* `{p_str}` ({em} {t['change']:+.2f}%)"
+
+    msg = "🌍 *تقرير الاقتصاد العام وحركة السيولة*\n"
+    msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += "📊 *الأسعار والعملات القيادية اللحظية:*\n"
+    msg += f"{format_row('البيتكوين (BTC)', btc)}\n"
+    msg += f"{format_row('الإيثيريوم (ETH)', eth)}\n"
+    msg += f"{format_row('سولانا (SOL)', sol)}\n"
+    msg += f"{format_row('سوي (SUI)', sui)}\n\n"
+    msg += "📈 *القراءة الاقتصادية للمرحلة:*\n"
+    msg += "1. استقرار البيتكوين يعطي مساحة قوية لحركة العملات البديلة (Altcoins).\n"
+    msg += "2. استمرار التدفقات النقدية نحو شبكات البنية التحتية والذكاء الاصطناعي.\n"
+    msg += "3. يفضل الشراء على دفعات (DCA) وتجنب الدخول بكامل رأس المال في نقطة واحدة.\n"
+    msg += "━━━━━━━━━━━━━━━━━━━"
+    return msg
+
+def get_top_coins():
+    msg = "🔥 *أهم المشاريع القيادية للفرص الحالية*\n"
+    msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+    coins = [
+        ("SUI", "سوي", "أسرع شبكة نمواً في السيولة وقيمة الـ TVL وتعتبر المنافس المباشر لسولانا."),
+        ("SOL", "سولانا", "المركز الأول لسيولة التداول وعملات الميم مع ترقب إطلاق صناديق ETF."),
+        ("NEAR", "نير بروتوكول", "تقود قطاع الذكاء الاصطناعي اللامركزي مع تقنيات تجريد السلاسل."),
+        ("TON", "تون كوين", "الوصول المباشر لمئات ملايين مستخدمي تليجرام وتطبيقات الدفع المصغر.")
+    ]
+    for sym, name, desc in coins:
+        t = get_live_ticker(sym)
+        p_str = ""
+        if t:
+            em = "🟢" if t["change"] >= 0 else "🔴"
+            val = f"{t['price']:,.2f}$" if t['price'] >= 1 else f"{t['price']:,.4f}$"
+            p_str = f" - `{val}` ({em} {t['change']:+.2f}%)"
+        msg += f"🔹 *عملة {name}* (`{sym}`){p_str}\n"
+        msg += f"• *التقييم:* {desc}\n"
+        msg += "───────────────────\n"
     return msg
 
 def calculate_trade(text):
@@ -214,35 +237,92 @@ def calculate_trade(text):
             entry = float(nums[0])
             target = float(nums[1])
             stop = float(nums[2])
+            
             risk = abs(entry - stop)
             reward = abs(target - entry)
             rr = reward / risk if risk > 0 else 0
             
             gain = (reward / entry) * 100
             loss = (risk / entry) * 100
-            eval_str = "🟢 صفقة ممتازة ذات عائد قوي" if rr >= 2.0 else "⚠️ نسبة المخاطرة مرتفعة"
             
-            msg = "📊 *حاسبة إدارة المخاطر والصفقات (Risk/Reward)*\n"
+            eval_txt = "🟢 صفقة ممتازة (عائد مرتفع مقارنة بالمخاطرة)" if rr >= 2.0 else "⚠️ نسبة المخاطرة مرتفعة، يفضل تحسين نقطة الدخول"
+            
+            msg = "📊 *حاسبة إدارة المخاطر والصفقات*\n"
             msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-            msg += f"💵 *سعر الدخول:* `{entry}$`\n"
-            msg += f"🎯 *الهدف:* `{target}$` (ربح: *+{gain:.2f}%*)\n"
-            msg += f"🛑 *وقف الخسارة:* `{stop}$` (مخاطرة: *-%{loss:.2f}*)\n"
-            msg += f"⚖️ *نسبة العائد إلى المخاطرة:* `1 : {rr:.2f}`\n"
-            msg += f"📌 *التقييم:* *{eval_str}*\n"
+            msg += f"• *سعر الدخول:* `{entry}$`\n"
+            msg += f"• *الهدف الربحي:* `{target}$` (ربح: *+{gain:.2f}%*)\n"
+            msg += f"• *وقف الخسارة:* `{stop}$` (مخاطرة: *-%{loss:.2f}*)\n\n"
+            msg += f"⚖️ *نسبة العائد إلى المخاطرة:* `1 إلى {rr:.2f}`\n"
+            msg += f"📌 *التقييم:* *{eval_txt}*\n"
+            msg += "━━━━━━━━━━━━━━━━━━━"
             return msg
         except Exception:
             pass
-    return "💡 لحساب صفقة، اكتب:\n`احسب [الدخول] [الهدف] [الوقف]` (مثال: `احسب 3.20 4.50 2.90`)."
+            
+    return (
+        "📊 *طريقة استخدام حاسبة الصفقات:*\n\n"
+        "اكتب كلمة **احسب** متبوعة بـ (سعر الدخول) (الهدف) (وقف الخسارة).\n\n"
+        "📝 *مثال:* `احسب 3.20 4.80 2.90`"
+    )
 
-# ==========================================================
-# 6. نظام التنبيهات في الخلفية ومراقبة الأسعار
-# ==========================================================
+def analyze_coin(text):
+    clean = text.lower().strip()
+    symbols_map = {
+        "sui": "SUI", "سوي": "SUI",
+        "sol": "SOL", "سولانا": "SOL", "سول": "SOL",
+        "btc": "BTC", "بيتكوين": "BTC", "بتكوين": "BTC",
+        "eth": "ETH", "ايثيريوم": "ETH", "اثيريوم": "ETH",
+        "ton": "TON", "تون": "TON",
+        "near": "NEAR", "نير": "NEAR",
+        "xrp": "XRP", "ريبل": "XRP",
+        "ada": "ADA", "كاردانو": "ADA",
+        "avax": "AVAX", "افالانش": "AVAX",
+        "pepe": "PEPE", "بيبي": "PEPE"
+    }
+    
+    target_sym = None
+    for k, v in symbols_map.items():
+        if k in clean:
+            target_sym = v
+            break
+            
+    if not target_sym:
+        words = text.replace("عملة", "").replace("مشروع", "").replace("سعر", "").split()
+        if words and len(words[0]) <= 8:
+            target_sym = words[0].upper()
+
+    if target_sym:
+        t = get_live_ticker(target_sym)
+        if t:
+            em = "🟢" if t['change'] >= 0 else "🔴"
+            p_str = f"{t['price']:,.4f}$" if t['price'] < 1 else f"{t['price']:,.2f}$"
+            
+            msg = f"📊 *تقرير وبيانات التداول: عملة `{target_sym}`*\n"
+            msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+            msg += f"💵 *السعر المباشر:* `{p_str}` ({em} {t['change']:+.2f}%)\n"
+            msg += f"📈 *أعلى سعر (24س):* `{t['high']:,.2f}$`\n"
+            msg += f"📉 *أدنى سعر (24س):* `{t['low']:,.2f}$`\n"
+            msg += f"📊 *حجم التداول اليومي:* `{t['vol']:,.0f}$`\n\n"
+            msg += "💡 *الرؤية الفنية:* العملة في نطاق تداول نشط، راقب مستويات السيولة وكسر القمم لتأكيد استمرار الزخم.\n"
+            msg += "━━━━━━━━━━━━━━━━━━━"
+            return msg
+
+    return (
+        f"🔍 *تحليل الاستفسار:*\n\n"
+        f"• تم فحص طلبك حول: `{text}`.\n"
+        f"• **النصيحة الاستثمارية:** ركز على المشاريع القيادية ذات الاستخدام الحقيقي وأحجام التداول المليارية، وابتعد عن العقود غير الموثقة.\n\n"
+        f"💡 يمكنك كتابة رمز أي عملة مباشرة مثل: `SUI` أو `SOL` أو `BTC` لجلب بياناتها اللحظية."
+    )
+
+# ==========================================
+# 6. نظام التنبيهات المباشرة في الخلفية
+# ==========================================
 def process_alert(chat_id, text):
-    words = text.replace("نبهني", "").replace("تنبيه", "").replace("اذا", "").replace("وصلت", "").replace("سعر", "").split()
+    words = text.replace("نبهني", "").replace("اذا", "").replace("وصلت", "").replace("سعر", "").split()
     if len(words) >= 2:
         sym = words[0].upper()
         if sym in ["سوي", "SUI"]: sym = "SUI"
-        elif sym in ["سولانا", "سول", "SOL"]: sym = "SOL"
+        elif sym in ["سولانا", "SOL"]: sym = "SOL"
         elif sym in ["بيتكوين", "BTC"]: sym = "BTC"
         
         nums = re.findall(r"[-+]?(?:\d*\.\d+|\d+)", words[1])
@@ -253,73 +333,67 @@ def process_alert(chat_id, text):
                 curr = t["price"]
                 cond = "ABOVE" if target >= curr else "BELOW"
                 with alerts_lock:
-                    ACTIVE_ALERTS.append({"chat_id": chat_id, "symbol": sym, "target": target, "cond": cond})
-                return f"🔔 *تم تفعيل التنبيه لعملة {sym}!* سأنبهك فور وصول السعر إلى `{target:,.4f}$`."
-    return "💡 لتفعيل تنبيه، اكتب: `نبهني SUI 4.5` أو `نبهني SOL 190`."
+                    ACTIVE_ALERTS.append({
+                        "chat_id": chat_id,
+                        "symbol": sym,
+                        "target": target,
+                        "condition": cond
+                    })
+                cond_txt = "أعلى من" if cond == "ABOVE" else "أدنى من"
+                return (
+                    f"🔔 *تم تثبيت التنبيه بنجاح!*\n\n"
+                    f"• *العملة:* `{sym}`\n"
+                    f"• *السعر الحالي:* `{curr:,.4f}$`\n"
+                    f"• *الهدف المطلوب:* `{target:,.4f}$` ({cond_txt})\n\n"
+                    f"🤖 سيتم إرسال إشعار فوري لك لحظة وصول السعر لهذا الرقم."
+                )
+    return "💡 لتفعيل تنبيه، اكتب مثلاً:\n`نبهني SUI 4.50` أو `نبهني SOL 190`"
+
+def get_alerts_list(chat_id):
+    with alerts_lock:
+        user_alerts = [a for a in ACTIVE_ALERTS if a["chat_id"] == chat_id]
+    if not user_alerts:
+        return "🔔 لا توجد تنبيهات نشطة حالياً.\n\nلتفعيل تنبيه اكتب: `نبهني SUI 4.50`"
+    msg = "🔔 *قائمة تنبيهاتك النشطة:*\n━━━━━━━━━━━━━━━━━━━\n\n"
+    for i, a in enumerate(user_alerts, 1):
+        msg += f"{i}. عملة *{a['symbol']}* عند سعر: `{a['target']:,.4f}$`\n"
+    return msg
 
 def alert_daemon():
     while True:
         try:
             with alerts_lock:
-                alerts_list = list(ACTIVE_ALERTS)
-            for a in alerts_list:
-                t = get_live_ticker(a["symbol"])
+                to_check = list(ACTIVE_ALERTS)
+            for alert in to_check:
+                t = get_live_ticker(alert["symbol"])
                 if t:
-                    p = t["price"]
-                    trig = (a["cond"] == "ABOVE" and p >= a["target"]) or (a["cond"] == "BELOW" and p <= a["target"])
+                    curr = t["price"]
+                    trig = False
+                    if alert["condition"] == "ABOVE" and curr >= alert["target"]: trig = True
+                    elif alert["condition"] == "BELOW" and curr <= alert["target"]: trig = True
                     if trig:
-                        msg = f"🚨🚨 *تنبيه سعر عاجل!* 🚨🚨\n\nوصلت عملة *{a['symbol']}* إلى هدفك المحدد: `{p:,.4f}$`!"
-                        send_msg(a["chat_id"], msg)
+                        notify = (
+                            f"🚨🚨 *تنبيه عاجل لتحرك السعر!* 🚨🚨\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"🎯 وصلت عملة *{alert['symbol']}* الآن إلى الهدف:\n"
+                            f"💵 *السعر الحالي:* `{curr:,.4f}$`\n"
+                            f"📌 *الهدف المحدد:* `{alert['target']:,.4f}$`\n\n"
+                            f"📊 راقب الشارت واتخذ قرارك المناسب."
+                        )
+                        send_msg(alert["chat_id"], notify)
                         with alerts_lock:
-                            if a in ACTIVE_ALERTS:
-                                ACTIVE_ALERTS.remove(a)
-            time.sleep(30)
-        except Exception:
-            time.sleep(30)
+                            if alert in ACTIVE_ALERTS:
+                                ACTIVE_ALERTS.remove(alert)
+            time.sleep(25)
+        except Exception as e:
+            print(f"Alert error: {e}")
+            time.sleep(25)
 
-# ==========================================================
-# 7. المحرك التحليلي للعملات
-# ==========================================================
-def analyze_coin_data(text):
-    clean = text.lower().strip()
-    sym = None
-    if "sui" in clean or "سوي" in clean: sym = "SUI"
-    elif "sol" in clean or "سولانا" in clean or "سول" in clean: sym = "SOL"
-    elif "btc" in clean or "بيتكوين" in clean: sym = "BTC"
-    elif "eth" in clean or "ايثيريوم" in clean: sym = "ETH"
-    elif "ton" in clean or "تون" in clean: sym = "TON"
-    elif "near" in clean or "نير" in clean: sym = "NEAR"
-    
-    if not sym:
-        words = text.replace("عملة", "").replace("مشروع", "").split()
-        if words and len(words[0]) <= 8:
-            sym = words[0].upper()
-            
-    if sym:
-        t = get_live_ticker(sym)
-        if t:
-            em = "🟢" if t['change'] >= 0 else "🔴"
-            p_str = f"{t['price']:,.4f}$" if t['price'] < 1 else f"{t['price']:,.2f}$"
-            msg = f"📊 *تقرير تحليلي وبيانات العملة: `{sym}`*\n"
-            msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-            msg += f"💵 *السعر المباشر:* `{p_str}` ({em} {t['change']:.2f}%)\n"
-            msg += f"📈 *نطاق اليوم:* أدنى `{t['low']:,.2f}$` | أعلى `{t['high']:,.2f}$`\n"
-            msg += f"📊 *حجم التداول:* `{t['vol']:,.0f}$`\n\n"
-            msg += "💡 *التقييم الفني:* تداول نشط وزخم سيولة، راقب مستويات الدعم والمقاومة لاتخاذ القرار."
-            return msg
-
-    return (
-        f"🔍 *تحليل الاستفسار:*\n\n"
-        f"• تم فحص طلبك حول: `{text}`.\n"
-        f"• **النصيحة:** ركز على مشاريع البنية التحتية وعملات الزخم المفحوصة ذات السيولة المؤمّنة.\n\n"
-        f"💡 اضغط على الأزرار السفلية لجلب صفقات الميم الحية أو مؤشرات السوق."
-    )
-
-# ==========================================================
-# 8. حلقة الاستماع ومعالجة رسائل المجموعات والمحادثات
-# ==========================================================
+# ==========================================
+# 7. الحلقة الأساسية وتشغيل البوت
+# ==========================================
 def main():
-    print("🚀 البوت الخارق يعمل الآن 24/7 مع صائد فرص المضاربة...")
+    print("🚀 البوت الذكي يعمل الآن بأعلى كفاءة وتنسيق مثالي...")
     offset = 0
     while True:
         try:
@@ -334,56 +408,46 @@ def main():
                     if not chat_id or not text:
                         continue
 
-                    # إزالة اسم البوت في حال كانت الرسالة من مجموعة
-                    clean_text = text.split("@")[0].strip()
-
-                    if clean_text in ["/start", "بدء", "قائمة"]:
+                    if text in ["/start", "بدء", "قائمة"]:
                         welcome = (
-                            "👋 *أهلاً بك في منصة GOLD WHALE الاستخباراتية الشاملة!* 🐋\n\n"
-                            "🎯 *صائد عملات الميم والمضاربة على سولانا (جديد)*\n"
-                            "🐋 *رادار الحيتان والسيولة المؤسسية*\n"
-                            "⏳ *رادار فك التجميد وتنبيهات الهبوط*\n"
-                            "🌡️ *مؤشر الخوف والطمع وتحليل المشاعر*\n"
-                            "🔔 *تنبيهات الأسعار اللحظية*\n\n"
-                            "👇 *اختر من القائمة أدناه للبدء فوراً:*"
+                            "👋 *أهلاً بك في منصة GOLD WHALE الاستخباراتية للكريبتو!* 🐋\n\n"
+                            "🚀 **لوحة التحكم السريعة في خدمتك:**\n"
+                            "• ⏳ *رادار فك التجميد:* مواعيد طرح كميات العملات.\n"
+                            "• 🐋 *رادار الحيتان:* تتبع تحركات المحافظ الضخمة.\n"
+                            "• 🪂 *رادار الإيردروبات:* أفضل الشبكات التجريبية المجانية.\n"
+                            "• 🌡️ *مؤشر الخوف والطمع:* تحليل المشاعر اليومي.\n"
+                            "• 🔔 *تنبيهات الأسعار:* اكتب (نبهني SUI 4.5).\n"
+                            "• 📊 *حاسبة الصفقات:* اكتب (احسب 3.20 4.80 2.90).\n\n"
+                            "👇 *اضغط على أي زر بالأسفل أو اكتب اسم أي عملة لتحليلها فوراً!*"
                         )
                         send_msg(chat_id, welcome, get_main_keyboard())
 
-                    elif clean_text in ["🎯 صائد فرص المضاربة (Solana Hype)", "/hunter", "مضاربة", "فرص"]:
-                        send_msg(chat_id, hunt_solana_hype_gems())
-
-                    elif clean_text in ["🔥 أهم العملات والمشاريع", "/top"]:
-                        send_msg(chat_id, "🔥 *أهم المشاريع القيادية للفرص الحالية:*\n• *SUI:* نمو هائل في الـ TVL وتدفق السيولة.\n• *SOL:* زعيمة التداولات السريعة والميم كوينز.\n• *NEAR:* قائدة قطاع الذكاء الاصطناعي وبنية البلوكشين.")
-
-                    elif clean_text in ["🐋 رادار الحيتان والسيولة", "/whales"]:
-                        send_msg(chat_id, get_whale_radar())
-
-                    elif clean_text in ["⏳ رادار فك التجميد (Unlocks)", "/unlocks"]:
+                    elif text == "🔥 أهم العملات والمشاريع":
+                        send_msg(chat_id, get_top_coins())
+                    elif text == "⏳ رادار فك التجميد":
                         send_msg(chat_id, get_token_unlocks())
-
-                    elif clean_text in ["🌡️ مؤشر الخوف والطمع", "/fng"]:
-                        send_msg(chat_id, get_fear_and_greed())
-
-                    elif clean_text in ["🪂 رادار الإيردروبات والـ Testnet", "/airdrops"]:
+                    elif text == "🐋 رادار تحركات الحيتان":
+                        send_msg(chat_id, get_whale_radar())
+                    elif text == "🪂 رادار الإيردروبات المجانية":
                         send_msg(chat_id, get_airdrop_radar())
-
-                    elif clean_text in ["📊 حاسبة إدارة الصفقات", "/calc"]:
+                    elif text == "🌡️ مؤشر الخوف والطمع":
+                        send_msg(chat_id, get_fear_and_greed())
+                    elif text == "📊 حاسبة إدارة الصفقات":
                         send_msg(chat_id, calculate_trade("info"))
+                    elif text == "🌍 قراءة الاقتصاد والسيولة":
+                        send_msg(chat_id, get_market_overview())
+                    elif text == "🔔 تنبيهات الأسعار":
+                        send_msg(chat_id, get_alerts_list(chat_id))
 
-                    elif clean_text in ["🌍 قراءة الاقتصاد العام", "/macro"]:
-                        send_msg(chat_id, "🌍 *تقرير حركة السيولة العامة:*\n• استقرار حركة البيتكوين يمنح مساحة لانفجار العملات البديلة.\n• استمرار تدفقات الصناديق نحو شبكات السرعة الفائقة والـ AI.")
-
-                    elif clean_text.startswith("نبهني") or clean_text.startswith("تنبيه"):
-                        send_msg(chat_id, process_alert(chat_id, clean_text))
-
-                    elif clean_text.startswith("احسب") or clean_text.startswith("حساب"):
-                        send_msg(chat_id, calculate_trade(clean_text))
-
+                    elif text.startswith("نبهني") or text.startswith("تنبيه"):
+                        send_msg(chat_id, process_alert(chat_id, text))
+                    elif text.startswith("احسب") or text.startswith("حساب"):
+                        send_msg(chat_id, calculate_trade(text))
                     else:
-                        send_msg(chat_id, analyze_coin_data(clean_text))
+                        send_msg(chat_id, analyze_coin(text))
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Loop error: {e}")
             time.sleep(2)
 
 if __name__ == "__main__":
