@@ -1,128 +1,192 @@
 import requests
+import time
 
 # --- المفاتيح والبيانات المدمجة ---
 CRYPTORANK_API_KEY = "497d41132b239b213d9bdbbc038b144248324792a76ca0647c1acb4063d3"
 TELEGRAM_BOT_TOKEN = "8862592074:AAHnglRbJJKNdRTjjox4PpkYtYkyiFcAi-s"
-TELEGRAM_CHAT_ID = "7926863163"
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
-# كميات محفظتك
-SUI_AMOUNT = 900
-SOL_AMOUNT = 3
-
-def send_telegram_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+def send_message(chat_id, text, reply_markup=None):
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": text,
         "parse_mode": "Markdown",
         "disable_web_page_preview": True
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
-        res = requests.post(url, json=payload, timeout=10)
-        return res.json()
+        requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
     except Exception as e:
-        print(f"Error sending Telegram message: {e}")
-        return None
+        print(f"Error sending msg: {e}")
 
-def get_crypto_prices():
-    """جلب أسعار SUI و SOL المباشرة وحساب قيمة المحفظة"""
+def get_main_keyboard():
+    return {
+        "keyboard": [
+            [{"text": "🚀 مشاريع وعملات جديدة"}, {"text": "💼 صفقات التمويل والاستثمار"}],
+            [{"text": "🌍 تقرير نبض السوق والسيولة"}, {"text": "🔍 مساعدة وكيفية البحث"}]
+        ],
+        "resize_keyboard": True
+    }
+
+def get_new_projects():
+    """تحليل العملات والمشاريع الجديدة وتقييماتها"""
     try:
-        sui_res = requests.get("https://api.binance.com/api/v3/ticker/24hr?symbol=SUIUSDT", timeout=10).json()
-        sol_res = requests.get("https://api.binance.com/api/v3/ticker/24hr?symbol=SOLUSDT", timeout=10).json()
+        url = f"https://api.cryptorank.io/v1/currencies?api_key={CRYPTORANK_API_KEY}&limit=4&sort=-rank"
+        res = requests.get(url, timeout=10).json()
         
-        sui_price = float(sui_res.get("lastPrice", 0))
-        sui_change = float(sui_res.get("priceChangePercent", 0))
-        
-        sol_price = float(sol_res.get("lastPrice", 0))
-        sol_change = float(sol_res.get("priceChangePercent", 0))
-        
-        total_sui_val = sui_price * SUI_AMOUNT
-        total_sol_val = sol_price * SOL_AMOUNT
-        total_portfolio = total_sui_val + total_sol_val
-        
-        return {
-            "sui_price": sui_price, "sui_change": sui_change, "sui_total": total_sui_val,
-            "sol_price": sol_price, "sol_change": sol_change, "sol_total": total_sol_val,
-            "portfolio_total": total_portfolio
-        }
+        if "data" in res and len(res["data"]) > 0:
+            msg = "🚀 *دليل المشاريع والعملات الحديثة في السوق*\n"
+            msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            for item in res["data"][:4]:
+                name = item.get("name", "مشروع جديد")
+                symbol = item.get("symbol", "")
+                category = item.get("category", "Web3 / DeFi")
+                
+                usd_data = item.get("values", {}).get("USD", {})
+                price = usd_data.get("price", 0)
+                mcap = usd_data.get("marketCap", 0)
+                change = usd_data.get("percentChange24h", 0)
+                
+                price_str = f"{price:,.4f}$" if price < 1 else f"{price:,.2f}$"
+                mcap_str = f"{mcap:,.0f}$" if mcap > 0 else "قيد الاحتساب (مبكر)"
+                sentiment = "📈 مشروع صاعد بزخم" if change > 0 else "⚖️ في مرحلة تجميع وبناء سيولة"
+                
+                msg += f"🔹 *المشروع:* `{name}` (`{symbol}`)\n"
+                msg += f"🏷 *القطاع:* {category}\n"
+                msg += f"💵 *السعر الحالي:* `{price_str}`\n"
+                msg += f"📊 *القيمة السوقية:* `{mcap_str}`\n"
+                msg += f"🎯 *الرؤية والتقييم:* {sentiment}\n"
+                msg += "───────────────────\n"
+            return msg
+        return "⚠️ لا توجد بيانات مشاريع محدثة حالياً."
     except Exception as e:
-        print(f"Error fetching prices: {e}")
-        return None
+        return f"❌ تعذر جلب المشاريع: {e}"
 
 def get_funding_deals():
-    """جلب أحدث صفقات التمويل والمشاريع الجديدة من CryptoRank"""
+    """تحليل صفقات التمويل ورؤوس الأموال الاستثمارية"""
     try:
-        url = f"https://api.cryptorank.io/v1/funding-rounds?api_key={CRYPTORANK_API_KEY}&limit=3"
+        url = f"https://api.cryptorank.io/v1/funding-rounds?api_key={CRYPTORANK_API_KEY}&limit=4"
         res = requests.get(url, timeout=10).json()
-        deals = []
+        
         if "data" in res and len(res["data"]) > 0:
-            for item in res["data"][:3]:
-                name = item.get("projectName", "مشروع غير معروف")
-                raised = item.get("raised", "غير محدد")
-                category = item.get("category", "عام")
-                stage = item.get("stage", "Seed")
-                raised_str = f"{raised:,.0f}$" if isinstance(raised, (int, float)) else str(raised)
-                deals.append(f"• `{name}` | تمويل: *{raised_str}* ({category} - {stage})")
-        return deals
+            msg = "💼 *أحدث جولات التمويل المؤسسي والمشاريع الصاعدة*\n"
+            msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            for item in res["data"][:4]:
+                name = item.get("projectName", "مشروع غير معلن")
+                raised = item.get("raised", 0)
+                stage = item.get("stage", "Seed Round")
+                category = item.get("category", "Infrastructure")
+                
+                raised_str = f"{raised:,.0f}$" if isinstance(raised, (int, float)) and raised > 0 else "غير معلن"
+                
+                msg += f"🏛 *المشروع:* `{name}`\n"
+                msg += f"💰 *حجم الاستثمار المجموع:* `{raised_str}`\n"
+                msg += f"📌 *مرحلة الاستثمار:* {stage}\n"
+                msg += f"🏷 *مجال المشروع:* {category}\n"
+                msg += f"💡 *التحليل:* دعم قوي من صناديق الاستثمار، يُنصح بمتابعة اختبارات الشبكة (Testnet).\n"
+                msg += "───────────────────\n"
+            return msg
+        return "⚠️ لا توجد صفقات تمويل مسجلة في الساعات الأخيرة."
     except Exception as e:
-        print(f"Error fetching deals: {e}")
-        return []
+        return f"❌ تعذر جلب جولات التمويل: {e}"
 
-def get_global_news():
-    """جلب أحدث الأخبار الاقتصادية وحركة السوق العالمية"""
+def get_market_overview():
+    """تقرير اقتصادي لحالة السوق والسيولة"""
     try:
-        url = "https://api.rss2json.com/v1/api.json?rss_url=https://cointelegraph.com/rss"
-        res = requests.get(url, timeout=10).json()
-        news = []
-        if res.get("status") == "ok" and "items" in res:
-            for item in res["items"][:3]:
-                title = item.get("title", "")
-                link = item.get("link", "")
-                news.append(f"• [{title}]({link})")
-        return news
+        btc_res = requests.get("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT", timeout=10).json()
+        btc_price = float(btc_res.get("lastPrice", 0))
+        btc_change = float(btc_res.get("priceChangePercent", 0))
+        
+        trend = "🟢 سيطرة شرائية ومؤشرات إيجابية" if btc_change >= 0 else "🔴 ضغوط بيعية وحذر في السيولة"
+        
+        msg = "🌍 *تقرير حركة الاقتصاد والسيولة العامة للسوق*\n"
+        msg += "━━━━━━━━━━━━━━━━━━━\n\n"
+        msg += f"🪙 *مؤشر البيتكوين العام:* `{btc_price:,.2f}$` ({btc_change:.2f}%)\n"
+        msg += f"📊 *اتجاه السيولة الإجمالي:* {trend}\n\n"
+        msg += "🧠 *القراءة الاقتصادية للمرحلة:*\n"
+        msg += "• ترقب وتدوير سيولة تدريجي بين المشاريع الكبرى وعملات البنية التحتية.\n"
+        msg += "• زيادة في وتيرة تمويل مشاريع الذكاء الاصطناعي وشبكات الطبقة الأولى الجديدة.\n"
+        msg += "• يُفضل التركيز على الاكتتابات ذات التقييم المنخفض وتجنب الشراء عند القمم السعرية.\n"
+        return msg
     except Exception as e:
-        print(f"Error fetching news: {e}")
-        return []
+        return f"❌ تعذر تحليل السوق: {e}"
 
-def generate_and_send_report():
-    prices = get_crypto_prices()
-    deals = get_funding_deals()
-    news = get_global_news()
-    
-    msg = "🌐 *التقرير الدوري الشامل للسوق والمحفظة* 🌐\n"
-    msg += "━━━━━━━━━━━━━━━━━━━\n\n"
-    
-    # 1. قسم المحفظة وعملاتك
-    if prices:
-        sui_emoji = "🟢" if prices["sui_change"] >= 0 else "🔴"
-        sol_emoji = "🟢" if prices["sol_change"] >= 0 else "🔴"
-        
-        msg += "📊 *حالة محفظتك وعملاتك الأساسية:*\n"
-        msg += f"🔹 *SUI:* `{prices['sui_price']:.4f}$` ({sui_emoji} {prices['sui_change']:.2f}%)\n"
-        msg += f"   ▫️ قيمة 900 حبة: *{prices['sui_total']:.2f}$*\n"
-        msg += f"🔹 *SOL:* `{prices['sol_price']:.2f}$` ({sol_emoji} {prices['sol_change']:.2f}%)\n"
-        msg += f"   ▫️ قيمة 3 حبات: *{prices['sol_total']:.2f}$*\n"
-        msg += f"💰 *إجمالي قيمة المحفظة اللحظية:* `{prices['portfolio_total']:.2f}$`\n\n"
-    
-    # 2. قسم صفقات التمويل المؤسسي
-    msg += "💼 *أحدث صفقات التمويل والمشاريع (CryptoRank):*\n"
-    if deals:
-        msg += "\n".join(deals) + "\n\n"
-    else:
-        msg += "• لا توجد جولات تمويل مسجلة حديثاً.\n\n"
-        
-    # 3. قسم أخبار الاقتصاد والسوق العالمية
-    msg += "🌍 *أبرز أخبار السوق والاقتصاد العالمي:*\n"
-    if news:
-        msg += "\n".join(news) + "\n\n"
-    else:
-        msg += "• جاري متابعة تطورات السوق لحظة بلحظة.\n\n"
-        
-    msg += "━━━━━━━━━━━━━━━━━━━\n"
-    msg += "🤖 _تم التحديث والإرسال تلقائياً_"
-    
-    send_telegram_message(msg)
-    print("✅ تم إرسال التقرير الشامل بنجاح!")
+def search_coin(query):
+    """البحث الفوري عن أي عملة يطلبها المستخدم"""
+    symbol = query.upper().strip()
+    try:
+        res = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}USDT", timeout=8).json()
+        if "lastPrice" in res:
+            price = float(res["lastPrice"])
+            change = float(res["priceChangePercent"])
+            high = float(res["highPrice"])
+            low = float(res["lowPrice"])
+            volume = float(res["quoteVolume"])
+            
+            emoji = "🟢" if change >= 0 else "🔴"
+            price_str = f"{price:,.4f}$" if price < 1 else f"{price:,.2f}$"
+            
+            msg = f"🔍 *تقرير تحليلي للعملة:* `{symbol}`\n"
+            msg += "━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"💵 *السعر اللحظي:* `{price_str}` ({emoji} {change:.2f}%)\n"
+            msg += f"📈 *أعلى سعر (24س):* `{high:,.2f}$`\n"
+            msg += f"📉 *أدنى سعر (24س):* `{low:,.2f}$`\n"
+            msg += f"📊 *حجم التداول اليومي:* `{volume:,.0f}$`\n\n"
+            msg += "💡 *التقييم الفني:* تداول نشط، راقب مناطق الدعم والكسر قبل فتح الصفقات.\n"
+            return msg
+    except Exception:
+        pass
+    return f"⚠️ لم يتم العثور على بيانات مباشرة لعملة `{symbol}`. تأكد من كتابة رمز العملة بشكل صحيح (مثال: BTC, ETH, SUI, SOL)."
+
+def main_loop():
+    print("🚀 البوت يعمل الآن ويستمع لجميع رسائلك في تليجرام...")
+    offset = 0
+    while True:
+        try:
+            updates = requests.get(f"{TELEGRAM_API}/getUpdates?offset={offset}&timeout=30", timeout=35).json()
+            if "result" in updates:
+                for update in updates["result"]:
+                    offset = update["update_id"] + 1
+                    message = update.get("message", {})
+                    chat_id = message.get("chat", {}).get("id")
+                    text = message.get("text", "").strip()
+                    
+                    if not chat_id or not text:
+                        continue
+                    
+                    if text in ["/start", "بدء", "قائمة"]:
+                        welcome = (
+                            "👋 *أهلاً بك! أنا مساعدك الذكي لتحليل الأسواق والعملات.*\n\n"
+                            "اختر من الأزرار بالأسفل، أو **اكتب اسم أي عملة مباشرة** (مثل BTC, SOL, SUI) لأقوم بتحليلها لك فوراً دون روابط."
+                        )
+                        send_message(chat_id, welcome, get_main_keyboard())
+                        
+                    elif text == "🚀 مشاريع وعملات جديدة":
+                        send_message(chat_id, get_new_projects())
+                        
+                    elif text == "💼 صفقات التمويل والاستثمار":
+                        send_message(chat_id, get_funding_deals())
+                        
+                    elif text == "🌍 تقرير نبض السوق والسيولة":
+                        send_message(chat_id, get_market_overview())
+                        
+                    elif text == "🔍 مساعدة وكيفية البحث":
+                        help_msg = (
+                            "📌 *طريقة الاستخدام:*\n\n"
+                            "1️⃣ اضغط على الأزرار السريعة لجلب تقارير فورية عن المشاريع والصفقات والسيولة.\n"
+                            "2️⃣ اكتب رمز أي عملة تريد تحليلها مباشرة في المحادثة (مثال: `ETH` أو `SOL` أو `NEAR`)."
+                        )
+                        send_message(chat_id, help_msg)
+                        
+                    else:
+                        send_message(chat_id, search_coin(text))
+                        
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(3)
 
 if __name__ == "__main__":
-    generate_and_send_report()
+    main_loop()
